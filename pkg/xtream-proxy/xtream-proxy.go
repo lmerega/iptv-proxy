@@ -159,7 +159,7 @@ func (c *Client) Action(config *config.ProxyConfig, action string, q url.Values)
 		}
 		respBody, err = c.epgResponse(getSimpleDataTable, q["stream_id"][0], 0)
 	default:
-		respBody, err = c.login(config.User.String(), config.Password.String(), protocol+"://"+config.HostConfig.Hostname, config.AdvertisedPort, protocol)
+		respBody, err = c.login(config.User.String(), config.Password.String(), config.HostConfig.Hostname, config.AdvertisedPort, protocol)
 	}
 
 	if err != nil && httpcode == 0 {

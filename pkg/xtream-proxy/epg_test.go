@@ -118,3 +118,27 @@ func TestEPGMissingStreamDoesNotContactProvider(t *testing.T) {
 		t.Fatalf("status=%d error=%v", status, err)
 	}
 }
+
+func TestLoginAdvertisesHostnameWithoutScheme(t *testing.T) {
+	c := epgTestClient(t, 200, `{}`, func(*http.Request) { t.Fatal("unexpected provider request") })
+	response, _, err := c.Action(&config.ProxyConfig{HostConfig: &config.HostConfiguration{Hostname: "proxy.invalid"}, AdvertisedPort: 9191}, "", url.Values{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data struct {
+		ServerInfo struct {
+			URL      string `json:"url"`
+			Protocol string `json:"server_protocol"`
+		} `json:"server_info"`
+	}
+	if err := json.Unmarshal(encoded, &data); err != nil {
+		t.Fatal(err)
+	}
+	if data.ServerInfo.URL != "proxy.invalid" || data.ServerInfo.Protocol != "http" {
+		t.Fatalf("invalid advertised server: %s", encoded)
+	}
+}
