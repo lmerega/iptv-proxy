@@ -49,6 +49,14 @@ func TestTimeshiftQueryEndpoint(t *testing.T) {
 			if recorder.Code != http.StatusPartialContent || recorder.Body.String() != "fixture-video" {
 				t.Fatalf("status=%d body=%q", recorder.Code, recorder.Body.String())
 			}
+			q.Set("start", "2026-10-10:08-55 AM")
+			req = httptest.NewRequest(http.MethodGet, "http://proxy.invalid"+endpoint+"?"+q.Encode(), nil)
+			req.Header.Set("Range", "bytes=0-4095")
+			recorder = newStreamRecorder()
+			router.ServeHTTP(recorder, req)
+			if recorder.Code != http.StatusPartialContent {
+				t.Fatalf("AM clock status=%d", recorder.Code)
+			}
 			q.Set("password", "incorrect")
 			recorder = newStreamRecorder()
 			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "http://proxy.invalid"+endpoint+"?"+q.Encode(), nil))
