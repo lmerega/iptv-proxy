@@ -4,13 +4,27 @@ A self-hosted reverse proxy for IPTV M3U playlists and Xtream Codes API. Expose 
 
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green)
-![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fwireshj%2Fiptv--proxy-blue?logo=docker)
-[![Release](https://img.shields.io/github/v/release/WireshJ/iptv-proxy)](https://github.com/WireshJ/iptv-proxy/releases/latest)
+![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flmerega%2Fiptv--proxy-blue?logo=docker)
+[![Release](https://img.shields.io/github/v/release/lmerega/iptv-proxy)](https://github.com/lmerega/iptv-proxy/releases/latest)
+
+
+## Maintenance of this fork
+
+This fork is maintained by [lmerega](https://github.com/lmerega) for ongoing fixes and container builds. Report issues and contribute changes in [this repository](https://github.com/lmerega/iptv-proxy/issues).
+
+As of **10 November 2026**, the latest commit on [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy) is dated **11 May 2026**. Our upstream [catch-up compatibility PR #1](https://github.com/WireshJ/iptv-proxy/pull/1) and [numeric category ID PR #2](https://github.com/WireshJ/iptv-proxy/pull/2) remain open without reviews or comments. Upstream therefore appears inactive; this is an observation, not an announcement from its maintainer. We are maintaining our changes here independently and welcome future upstream collaboration.
+
+The default branch includes both fixes: preserved Xtream EPG responses and catch-up playback compatibility, plus support for numeric and quoted stream category IDs. Regression tests run before container publication.
+
+**Fork image:** `ghcr.io/lmerega/iptv-proxy:latest` (`linux/amd64`, `linux/arm64`). Each build also publishes a full commit tag `sha-<commit>` for reproducible deployments. Existing installations must explicitly change their image reference to receive this fork's updates.
+
+Original authorship and the GPL-3.0 license are preserved; see [Credits](#-credits) and [LICENSE](LICENSE).
 
 ---
 
 ## Table of Contents
 
+- [Maintenance of this fork](#maintenance-of-this-fork)
 - [Features](#-features)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
@@ -63,7 +77,7 @@ docker run -d \
   -e USER=myuser \
   -e PASSWORD=mypassword \
   -e GIN_MODE=release \
-  ghcr.io/wireshj/iptv-proxy:latest
+  ghcr.io/lmerega/iptv-proxy:latest
 ```
 
 **Port:** `8080`
@@ -77,7 +91,7 @@ Download the compose file and fill in your credentials:
 ```bash
 mkdir -p /data/apps/iptv-proxy
 curl -o /data/apps/iptv-proxy/docker-compose.yml \
-  https://raw.githubusercontent.com/WireshJ/iptv-proxy/master/docker-compose.yml
+  https://raw.githubusercontent.com/lmerega/iptv-proxy/master/docker-compose.yml
 
 cd /data/apps/iptv-proxy
 # Edit docker-compose.yml with your VPN and IPTV credentials
@@ -95,7 +109,7 @@ docker compose up -d
 ### Manual (Go binary)
 
 ```bash
-git clone https://github.com/WireshJ/iptv-proxy.git
+git clone https://github.com/lmerega/iptv-proxy.git
 cd iptv-proxy
 
 go build -mod=vendor -o iptv-proxy .

@@ -26,7 +26,7 @@ services:
       - HTTP_CONTROL_SERVER_ADDRESS=:8001
 
   iptv-proxy:
-    image: ghcr.io/wireshj/iptv-proxy:latest
+    image: ghcr.io/lmerega/iptv-proxy:latest
     container_name: iptv-proxy
     volumes:
       # Mount a local m3u file instead of using a remote URL (optional)

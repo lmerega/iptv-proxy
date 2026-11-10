@@ -14,7 +14,7 @@ services:
       - proxy
 
   iptv-proxy:
-    image: ghcr.io/wireshj/iptv-proxy:latest
+    image: ghcr.io/lmerega/iptv-proxy:latest
     container_name: iptv-proxy
     restart: always
     volumes:

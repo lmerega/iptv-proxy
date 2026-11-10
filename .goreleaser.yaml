@@ -24,14 +24,14 @@ archives:
 
 release:
   github:
-    owner: WireshJ
+    owner: lmerega
     name: iptv-proxy
   draft: false
 
 nfpms:
-  - vendor: WireshJ
-    homepage: https://github.com/WireshJ/iptv-proxy
-    maintainer: WireshJ
+  - vendor: lmerega
+    homepage: https://github.com/lmerega/iptv-proxy
+    maintainer: lmerega
     description: Self-hosted reverse proxy for IPTV M3U playlists and Xtream Codes API
     license: GPL-3.0
     formats:
@@ -40,10 +40,10 @@ nfpms:
 
 dockers:
   - image_templates:
-      - "ghcr.io/wireshj/iptv-proxy:{{ .Tag }}-arm64"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}-arm64"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}.{{ .Minor }}-arm64"
-      - "ghcr.io/wireshj/iptv-proxy:latest-arm64"
+      - "ghcr.io/lmerega/iptv-proxy:{{ .Tag }}-arm64"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}-arm64"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}.{{ .Minor }}-arm64"
+      - "ghcr.io/lmerega/iptv-proxy:latest-arm64"
     use: buildx
     goos: linux
     goarch: arm64
@@ -58,14 +58,14 @@ dockers:
     skip_push: false
 
   - image_templates:
-      - "ghcr.io/wireshj/iptv-proxy:{{ .Tag }}-amd64"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}-amd64"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}.{{ .Minor }}-amd64"
-      - "ghcr.io/wireshj/iptv-proxy:latest-amd64"
-      - "ghcr.io/wireshj/iptv-proxy:{{ .Tag }}"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}"
-      - "ghcr.io/wireshj/iptv-proxy:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/wireshj/iptv-proxy:latest"
+      - "ghcr.io/lmerega/iptv-proxy:{{ .Tag }}-amd64"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}-amd64"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}.{{ .Minor }}-amd64"
+      - "ghcr.io/lmerega/iptv-proxy:latest-amd64"
+      - "ghcr.io/lmerega/iptv-proxy:{{ .Tag }}"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}"
+      - "ghcr.io/lmerega/iptv-proxy:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/lmerega/iptv-proxy:latest"
     use: buildx
     goos: linux
     goarch: amd64
