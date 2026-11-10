@@ -1,41 +1,57 @@
-# 📡 IPTV Proxy
+# 📡 IPTV Proxy — lmerega fork
 
 A self-hosted reverse proxy for IPTV M3U playlists and Xtream Codes API. Expose your IPTV provider behind your own credentials and hostname, with optional VPN routing via Gluetun.
 
 ![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)
 ![License](https://img.shields.io/badge/license-GPL--3.0-green)
 ![Docker](https://img.shields.io/badge/docker-ghcr.io%2Flmerega%2Fiptv--proxy-blue?logo=docker)
-[![Release](https://img.shields.io/github/v/release/lmerega/iptv-proxy)](https://github.com/lmerega/iptv-proxy/releases/latest)
+[![Tests and container builds](https://github.com/lmerega/iptv-proxy/actions/workflows/docker-image.yml/badge.svg)](https://github.com/lmerega/iptv-proxy/actions/workflows/docker-image.yml)
 
 
-## Maintenance of this fork
+## Origin and maintenance
 
-This fork is maintained by [lmerega](https://github.com/lmerega) for ongoing fixes and container builds. Report issues and contribute changes in [this repository](https://github.com/lmerega/iptv-proxy/issues).
+**This is an independently maintained fork of [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy), not an original project by lmerega.** The original application was created by [Pierre-Emmanuel Jacquier](https://github.com/pierre-emmanuelJ/iptv-proxy), with subsequent work by [incmve](https://github.com/incmve/iptv-proxy) and [WireshJ](https://github.com/WireshJ/iptv-proxy). Their work, copyright notices and license are retained. See [Credits](#-credits) for the contributions inherited from each project.
 
-As of **10 November 2026**, the latest commit on [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy) is dated **11 May 2026**. Our upstream [catch-up compatibility PR #1](https://github.com/WireshJ/iptv-proxy/pull/1) and [numeric category ID PR #2](https://github.com/WireshJ/iptv-proxy/pull/2) remain open without reviews or comments. Upstream therefore appears inactive; this is an observation, not an announcement from its maintainer. We are maintaining our changes here independently and welcome future upstream collaboration.
+[lmerega](https://github.com/lmerega) maintains the changes, documentation and container builds published **in this fork**. This repository does not imply endorsement by the earlier authors, ownership of their work, or an official transfer of upstream maintenance. Contributions and future upstream collaboration are welcome.
 
-The default branch includes both fixes: preserved Xtream EPG responses and catch-up playback compatibility, plus support for numeric and quoted stream category IDs. Regression tests run before container publication.
+### Why this fork exists
 
-**Fork image:** `ghcr.io/lmerega/iptv-proxy:latest` (`linux/amd64`, `linux/arm64`). Each build also publishes a full commit tag `sha-<commit>` for reproducible deployments. Existing installations must explicitly change their image reference to receive this fork's updates.
+We needed fixes for Xtream catch-up playback and providers returning numeric stream category IDs. These were submitted upstream as [PR #1](https://github.com/WireshJ/iptv-proxy/pull/1) and [PR #2](https://github.com/WireshJ/iptv-proxy/pull/2). We maintain and distribute them here so users can use the fixes independently of the upstream review schedule.
 
-Original authorship and the GPL-3.0 license are preserved; see [Credits](#-credits) and [LICENSE](LICENSE).
+**Activity checked on 10 November 2026:** the latest commit on the upstream default branch was dated **11 May 2026**, and both PRs remained open without reviews or comments. Upstream appears inactive based on those observations; its author has not announced abandonment or transferred maintainership to us. This dated note is not a claim about future upstream activity.
+
+### What changes here
+
+- Preserve the provider's Xtream EPG envelope and encoded fields.
+- Support catch-up query endpoints and normalize supported AM/PM timestamps.
+- Correct the advertised Xtream hostname and narrowly repair malformed byte-range advertisements.
+- Accept both numeric and quoted stream category IDs, avoiding catalog decoding failures.
+- Run regression tests, `go vet` and a build before publishing our own multi-platform containers.
+
+See [FORK_CHANGES.md](FORK_CHANGES.md) for dated changes and links to the patches. This remains a proxy: catch-up availability and retained history depend on your provider. It does not add a local DVR.
+
+**Use this fork's image:** [`ghcr.io/lmerega/iptv-proxy`](https://github.com/lmerega/iptv-proxy/pkgs/container/iptv-proxy), for `linux/amd64` and `linux/arm64`. The upstream image will not receive our independent changes automatically. See [Installation](#-installation), [Migration and updates](#migration-and-updates), and [License and source](#license-and-source).
 
 ---
 
 ## Table of Contents
 
-- [Maintenance of this fork](#maintenance-of-this-fork)
+- [Origin and maintenance](#origin-and-maintenance)
 - [Features](#-features)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
+  - [Docker Compose without VPN (quick start)](#docker-compose-without-vpn-quick-start)
   - [Docker (recommended)](#docker-recommended)
   - [Docker Compose with Gluetun VPN](#docker-compose-with-gluetun-vpn)
   - [Manual (Go binary)](#manual-go-binary)
+- [Migration and updates](#migration-and-updates)
 - [Configuration](#-configuration)
   - [Environment variables](#environment-variables)
 - [Usage](#-usage)
   - [M3U proxy](#m3u-proxy)
   - [Xtream Codes proxy](#xtream-codes-proxy)
+- [Support and contributing](#support-and-contributing)
+- [License and source](#license-and-source)
 - [Credits](#-credits)
 
 ---
@@ -65,6 +81,29 @@ Original authorship and the GPL-3.0 license are preserved; see [Credits](#-credi
 
 ## 🚀 Installation
 
+### Docker Compose without VPN (quick start)
+
+Install Docker with the Compose plugin, then download the standalone example:
+
+```bash
+mkdir iptv-proxy && cd iptv-proxy
+curl -fLO https://raw.githubusercontent.com/lmerega/iptv-proxy/master/compose.standalone.yaml
+curl -fsSL https://raw.githubusercontent.com/lmerega/iptv-proxy/master/.env.example -o .env
+```
+
+Edit `.env` before starting. Set `HOSTNAME` to the hostname or IP **reachable by your player**, without a scheme or path. `XTREAM_BASE_URL` includes the provider's scheme and port. `PROXY_USER` / `PROXY_PASSWORD` are the new credentials your players will use; `XTREAM_USER` / `XTREAM_PASSWORD` are your existing provider credentials. Choose your own proxy credentials, and keep `.env` private. Quote values containing spaces, `#` or `$` appropriately for Compose's `.env` format (single quotes preserve literal `$`).
+
+```bash
+docker compose -f compose.standalone.yaml config --quiet
+docker compose -f compose.standalone.yaml pull
+docker compose -f compose.standalone.yaml up -d
+docker compose -f compose.standalone.yaml ps
+```
+
+In your Xtream-compatible player, use `http://<HOSTNAME>:8080`, `PROXY_USER` and `PROXY_PASSWORD`. Provider credentials stay in the server configuration. To use a different port, set `PORT` and `ADVERTISED_PORT` consistently. Configure TLS separately with your reverse proxy if needed; `HTTPS=true` controls generated URLs and does not install a TLS listener.
+
+This example does not use a VPN. For M3U-only providers, use the Docker command below with `M3U_URL`. For Gluetun, use the separate VPN example.
+
 ### Docker (recommended)
 
 ```bash
@@ -86,7 +125,7 @@ docker run -d \
 
 ### Docker Compose with Gluetun VPN
 
-Download the compose file and fill in your credentials:
+The existing [docker-compose.yml](docker-compose.yml) is a separate Gluetun example. Fill in your VPN/provider credentials and adapt the VPN provider settings to your account before running it:
 
 ```bash
 mkdir -p /data/apps/iptv-proxy
@@ -123,6 +162,54 @@ go build -mod=vendor -o iptv-proxy .
 ```
 
 All CLI flags can also be set as environment variables (replace `-` with `_`, e.g. `M3U_URL`).
+
+---
+
+## Migration and updates
+
+### Choose an image version
+
+| Reference | Behavior |
+|-----------|----------|
+| `ghcr.io/lmerega/iptv-proxy:latest` | Moves when a successful build of `master` is published |
+| `ghcr.io/lmerega/iptv-proxy:sha-<full-40-character-commit>` | Identifies the source commit; available from successful builds |
+| `ghcr.io/lmerega/iptv-proxy@sha256:<digest>` | Pins the exact published image manifest |
+
+For a fixed deployment, copy a published commit tag or digest from the [package page](https://github.com/lmerega/iptv-proxy/pkgs/container/iptv-proxy). Place it in `IPTV_PROXY_IMAGE` for the standalone example, or in your existing service's `image:` field. Do not use the angle-bracket placeholders literally. Pulling an image does not update a running container; recreation is required.
+
+### Switch an existing installation
+
+1. Back up your Compose file and private environment files. Record the running image reference **and image ID/digest** so you can restore the same version; retain that local image until validation succeeds.
+2. In the `iptv-proxy` service, change only `image:` from the upstream/local image to a published `ghcr.io/lmerega/iptv-proxy` reference. Keep credentials, ports, volumes, VPN/network mode and other settings intact. Existing player settings can remain the same when those values are unchanged.
+3. Validate, pull and recreate the proxy using the correct Compose file for your installation. For the standalone example:
+
+   ```bash
+   docker compose -f compose.standalone.yaml config --quiet
+   docker compose -f compose.standalone.yaml pull iptv-proxy
+   docker compose -f compose.standalone.yaml up -d --no-deps iptv-proxy
+   docker compose -f compose.standalone.yaml ps
+   ```
+
+4. Check login, live/VOD categories and lists, then actual live/VOD/catch-up playback in your player. Passing a catalog request does not prove playback or provider archive availability.
+5. If checks fail, restore the backed-up image reference (or the recorded immutable digest) and configuration, then recreate only the proxy. Avoid `down`, volume deletion, or image pruning during migration.
+
+**Existing shared VPN namespace:** if your service uses `network_mode: service:gluetun`, preserve the running VPN when updating only the proxy. Some Compose versions cannot resolve that service dependency with `--no-deps`. Inspect the existing proxy's network mode:
+
+```bash
+docker inspect --format '{{.HostConfig.NetworkMode}}' <existing-proxy-container>
+```
+
+If it is `container:<vpn-container-id>`, put that exact value in a temporary override:
+
+```yaml
+services:
+  iptv-proxy:
+    network_mode: "container:<vpn-container-id>"
+```
+
+Use your normal Compose file **plus** this override with `up -d --no-deps iptv-proxy`, then verify the VPN's container ID and start time are unchanged. Keep the original `service:gluetun` in your persistent Compose file; the temporary override is tied to the current VPN container and must be regenerated after that container is replaced. Do not recreate the VPN merely to change the proxy image.
+
+For later updates, repeat the pull, recreation and validation steps. Pinning a commit/digest means updates are deliberate; it does not automatically track `latest`.
 
 ---
 
@@ -211,6 +298,29 @@ base-url: http://your-server-ip:8080
 
 ---
 
+## Support and contributing
+
+Please open [issues](https://github.com/lmerega/iptv-proxy/issues) and pull requests **in this fork** for problems with its changes or images. Include your image tag/digest, platform, player version, expected behavior and a reproducible example. Redact provider URLs, account details and authenticated request paths from logs or screenshots. Use synthetic data where possible.
+
+To build and check the source locally:
+
+```bash
+git clone https://github.com/lmerega/iptv-proxy.git
+cd iptv-proxy
+go test -mod=vendor ./...
+go vet -mod=vendor ./...
+go build -mod=vendor ./...
+docker build -t iptv-proxy:local .
+```
+
+The Go module path still uses `github.com/WireshJ/iptv-proxy` for compatibility; the source and images of this maintained fork live under `lmerega`. The vendored Xtream library contains a deliberate category ID fix: preserve it and its tests when updating dependencies.
+
+## License and source
+
+The inherited code is distributed under the GNU GPL; see the unchanged [LICENSE](LICENSE) and the existing source-file copyright/license notices (which permit GPL version 3 or later). Those notices and prior authors' credits remain in place. This fork's modifications are distributed under the same terms, without a warranty; the full terms are in the license.
+
+Source for the published containers is available in [this repository](https://github.com/lmerega/iptv-proxy), including the vendored dependencies and [Dockerfile](Dockerfile). The `sha-<commit>` image tag and `org.opencontainers.image.revision` label identify the source commit; open `https://github.com/lmerega/iptv-proxy/tree/<commit>` for that build. If you redistribute modified code or containers, preserve the notices and comply with the applicable GPL terms, including the corresponding-source requirements. Attribution alone does not replace the license terms.
+
 ## 🙏 Credits
 
 Originally created by [Pierre-Emmanuel Jacquier](https://github.com/pierre-emmanuelJ) — [pierre-emmanuelJ/iptv-proxy](https://github.com/pierre-emmanuelJ/iptv-proxy).
@@ -221,7 +331,7 @@ Extended by [incmve](https://github.com/incmve) — [incmve/iptv-proxy](https://
 - Continue-on-error for malformed `EXTINF` entries
 - Gluetun VPN integration
 
-Further developed by [WireshJ](https://github.com/WireshJ):
+Direct upstream: [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy), developed by [WireshJ](https://github.com/WireshJ):
 - Upgraded to Go 1.25, removed all deprecated APIs (`ioutil`, `satori/go.uuid`, `mitchellh/go-homedir`)
 - Context-aware HTTP streaming — streams cancel cleanly when a client disconnects
 - Shared HTTP client with connection pooling for better performance
@@ -230,6 +340,12 @@ Further developed by [WireshJ](https://github.com/WireshJ):
 - Updated Traefik setup to v3 with Let's Encrypt support
 - Removed dead code (`pkg/utils/`) and broken test stubs
 - All dependencies updated to latest stable versions
+
+Maintained independently here by [lmerega](https://github.com/lmerega):
+- Catch-up/EPG and numeric category ID fixes described above
+- Regression tests, fork documentation and GHCR container publication
+
+Thank you to the earlier authors and dependency maintainers. The full Git history is retained; this fork does not replace their authorship.
 
 **Powered by:**
 - [gin](https://github.com/gin-gonic/gin)

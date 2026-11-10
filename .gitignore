@@ -20,3 +20,8 @@ traefik/acme.json
 *.bak
 .DS_Store
 Thumbs.db
+
+# Local provider/proxy credentials
+.env
+.env.*
+!.env.example

@@ -1,0 +1,18 @@
+# Standalone Xtream example. Copy .env.example to .env and fill in all values.
+services:
+  iptv-proxy:
+    image: ${IPTV_PROXY_IMAGE:-ghcr.io/lmerega/iptv-proxy:latest}
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    environment:
+      HOSTNAME: ${HOSTNAME:?Set HOSTNAME in .env}
+      PORT: ${PORT:-8080}
+      ADVERTISED_PORT: ${ADVERTISED_PORT:-8080}
+      HTTPS: ${HTTPS:-false}
+      USER: ${PROXY_USER:?Set PROXY_USER in .env}
+      PASSWORD: ${PROXY_PASSWORD:?Set PROXY_PASSWORD in .env}
+      XTREAM_BASE_URL: ${XTREAM_BASE_URL:?Set XTREAM_BASE_URL in .env}
+      XTREAM_USER: ${XTREAM_USER:?Set XTREAM_USER in .env}
+      XTREAM_PASSWORD: ${XTREAM_PASSWORD:?Set XTREAM_PASSWORD in .env}
+      GIN_MODE: release
