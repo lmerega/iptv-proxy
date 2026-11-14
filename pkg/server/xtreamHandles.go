@@ -27,6 +27,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -440,65 +441,162 @@ var hlsClient = &http.Client{
 	},
 }
 
+// hlsMaxRedirects bounds the redirect chain followed for a live HLS playlist.
+const hlsMaxRedirects = 5
+
+// hlsMaxPlaylistBytes bounds the playlist body read into memory before rewriting.
+const hlsMaxPlaylistBytes = 8 << 20
+
+var hlsURIAttribute = regexp.MustCompile(`URI="([^"]*)"`)
+
+func isHLSRedirect(status int) bool {
+	switch status {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,
+		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		return true
+	}
+	return false
+}
+
+// rewriteHLSPlaylist resolves every URI against the final playlist URL. When local returns a
+// proxy path for it, that host-relative path is written (the client fetches it through the proxy);
+// every other URI is written as an absolute URL to its original host, untouched otherwise.
+func rewriteHLSPlaylist(body string, base *url.URL, local func(*url.URL) (string, bool)) string {
+	rewrite := func(raw string) string {
+		ref, err := url.Parse(strings.TrimSpace(raw))
+		if err != nil {
+			return raw
+		}
+		resolved := base.ResolveReference(ref)
+		if path, ok := local(resolved); ok {
+			return path
+		}
+		if ref.IsAbs() {
+			return raw
+		}
+		return resolved.String()
+	}
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimRight(line, "\r")
+		suffix := line[len(trimmed):]
+		switch {
+		case trimmed == "":
+			continue
+		case strings.HasPrefix(trimmed, "#"):
+			lines[i] = hlsURIAttribute.ReplaceAllStringFunc(trimmed, func(m string) string {
+				inner := hlsURIAttribute.FindStringSubmatch(m)[1]
+				return `URI="` + rewrite(inner) + `"`
+			}) + suffix
+		default:
+			lines[i] = rewrite(trimmed) + suffix
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// hlsLocalPath maps a provider URI of a playlist served from final to the proxy route that
+// serves it, with the provider credentials replaced by the proxy ones:
+//   - /hls/:token/<channel>_<n> and /hlsr/... on the playlist host (segment routes resolve the
+//     host from the stored playlist URL of the channel);
+//   - /live/<provider user>/<provider password>/... only on the configured provider host,
+//     because the /live route always rebuilds the upstream URL from XtreamBaseURL.
+// Other URIs (other hosts, unknown paths) are not routed and keep their original form.
+func (c *Config) hlsLocalPath(final *url.URL) func(*url.URL) (string, bool) {
+	providerCreds := "/" + c.XtreamUser.String() + "/" + c.XtreamPassword.String() + "/"
+	proxyCreds := "/" + c.User.String() + "/" + c.Password.String() + "/"
+	providerHost := ""
+	if base, err := url.Parse(c.XtreamBaseURL); err == nil {
+		providerHost = base.Host
+	}
+	return func(u *url.URL) (string, bool) {
+		if !strings.EqualFold(u.Host, final.Host) {
+			return "", false
+		}
+		p := u.Path
+		switch {
+		case strings.HasPrefix(p, "/hlsr/"):
+		case strings.HasPrefix(p, "/hls/"):
+			parts := strings.Split(strings.TrimPrefix(p, "/hls/"), "/")
+			if len(parts) != 2 || !strings.Contains(parts[1], "_") {
+				return "", false
+			}
+		case strings.HasPrefix(p, "/live"+providerCreds) && strings.EqualFold(u.Host, providerHost):
+		default:
+			return "", false
+		}
+		return strings.Replace(u.RequestURI(), providerCreds, proxyCreds, 1), true
+	}
+}
+
 func (c *Config) hlsXtreamStream(ctx *gin.Context, oriURL *url.URL) {
-	req, err := http.NewRequestWithContext(ctx.Request.Context(), "GET", oriURL.String(), nil)
-	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-		return
-	}
-
-	mergeHttpHeader(req.Header, ctx.Request.Header)
-
-	resp, err := hlsClient.Do(req)
-	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusFound {
-		location, err := resp.Location()
+	id := ctx.Param("id")
+	current := oriURL
+	var resp *http.Response
+	for hop := 0; ; hop++ {
+		req, err := http.NewRequestWithContext(ctx.Request.Context(), "GET", current.String(), nil)
 		if err != nil {
 			ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
 			return
 		}
-		id := ctx.Param("id")
-		if strings.Contains(location.String(), id) {
-			hlsChannelsRedirectURLLock.Lock()
-			hlsChannelsRedirectURL[id] = *location
-			hlsChannelsRedirectURLLock.Unlock()
-
-			hlsReq, err := http.NewRequestWithContext(ctx.Request.Context(), "GET", location.String(), nil)
-			if err != nil {
-				ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-				return
-			}
-
-			mergeHttpHeader(hlsReq.Header, ctx.Request.Header)
-
-			hlsResp, err := hlsClient.Do(hlsReq)
-			if err != nil {
-				ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-				return
-			}
-			defer hlsResp.Body.Close()
-
-			b, err := io.ReadAll(hlsResp.Body)
-			if err != nil {
-				ctx.AbortWithError(http.StatusInternalServerError, err) // nolint: errcheck
-				return
-			}
-			body := string(b)
-			body = strings.ReplaceAll(body, "/"+c.XtreamUser.String()+"/"+c.XtreamPassword.String()+"/", "/"+c.User.String()+"/"+c.Password.String()+"/")
-
-			mergeHttpHeader(ctx.Writer.Header(), hlsResp.Header)
-
-			ctx.Data(http.StatusOK, hlsResp.Header.Get("Content-Type"), []byte(body))
+		mergeHttpHeader(req.Header, ctx.Request.Header)
+		// The playlist body is rewritten: let the transport negotiate and decode compression itself.
+		req.Header.Del("Accept-Encoding")
+		resp, err = hlsClient.Do(req)
+		if err != nil {
+			ctx.AbortWithError(http.StatusBadGateway, err) // nolint: errcheck
 			return
 		}
-		ctx.AbortWithError(http.StatusInternalServerError, errors.New("Unable to HLS stream")) // nolint: errcheck
+		if !isHLSRedirect(resp.StatusCode) {
+			break
+		}
+		location, err := resp.Location()
+		resp.Body.Close()
+		if err != nil {
+			ctx.AbortWithError(http.StatusBadGateway, err) // nolint: errcheck
+			return
+		}
+		if hop >= hlsMaxRedirects {
+			ctx.AbortWithError(http.StatusBadGateway, errors.New("too many HLS redirects")) // nolint: errcheck
+			return
+		}
+		current = location
+	}
+	defer resp.Body.Close()
+
+	limited := io.LimitReader(resp.Body, hlsMaxPlaylistBytes+1)
+	b, err := io.ReadAll(limited)
+	if err != nil {
+		ctx.AbortWithError(http.StatusBadGateway, err) // nolint: errcheck
+		return
+	}
+	if len(b) > hlsMaxPlaylistBytes {
+		ctx.AbortWithError(http.StatusBadGateway, errors.New("HLS playlist too large")) // nolint: errcheck
 		return
 	}
 
-	ctx.Status(resp.StatusCode)
+	contentType := resp.Header.Get("Content-Type")
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		// Upstream error (also after a redirect): keep its status, never turn it into a fake 200.
+		ctx.Data(resp.StatusCode, contentType, b)
+		return
+	}
+
+	// Segment routes (/hls, /hlsr) resolve the provider host from the playlist URL of this channel.
+	hlsChannelsRedirectURLLock.Lock()
+	hlsChannelsRedirectURL[id] = *current
+	hlsChannelsRedirectURLLock.Unlock()
+
+	// Credentials are swapped only in URIs routed through the proxy; external URIs stay as sent.
+	body := rewriteHLSPlaylist(string(b), current, c.hlsLocalPath(current))
+
+	header := resp.Header.Clone()
+	for _, name := range []string{"Content-Length", "Content-Encoding", "Transfer-Encoding", "Content-Type"} {
+		header.Del(name)
+	}
+	mergeHttpHeader(ctx.Writer.Header(), header)
+	if contentType == "" {
+		contentType = "application/vnd.apple.mpegurl"
+	}
+	ctx.Data(resp.StatusCode, contentType, []byte(body))
 }
