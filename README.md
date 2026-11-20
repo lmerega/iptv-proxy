@@ -26,6 +26,7 @@ We needed fixes for Xtream catch-up playback and providers returning numeric str
 - Support catch-up query endpoints and normalize supported AM/PM timestamps.
 - Correct the advertised Xtream hostname and narrowly repair malformed byte-range advertisements.
 - Accept both numeric and quoted stream category IDs, avoiding catalog decoding failures.
+- Forward series and VOD info responses unchanged, so empty arrays and mixed number/string fields no longer cause HTTP 502.
 - Run regression tests, `go vet` and a build before publishing our own multi-platform containers.
 
 See [FORK_CHANGES.md](FORK_CHANGES.md) for dated changes and links to the patches. This remains a proxy: catch-up availability and retained history depend on your provider. It does not add a local DVR.

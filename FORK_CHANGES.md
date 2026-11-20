@@ -2,6 +2,12 @@
 
 This is a modification record for the fork, not a replacement for the original authors' history or copyright notices. Direct upstream: [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy). Earlier authors and contributions are listed in [README.md](README.md#-credits).
 
+## 20 November 2026 — series and VOD info passthrough
+
+- Forwarded `get_series_info` and `get_vod_info` provider JSON unchanged instead of decoding it with the typed Xtream structs, which rejected documents with empty arrays where objects are expected (episode `info`, `audio`, `video`) or mixed numeric/quoted fields and made the proxy answer HTTP 502 with an empty body.
+- Kept the 16 MiB read limit, the JSON-object check, the 400 response for a missing ID and the 502 response (without credentials in the message) for provider failures.
+- Added synthetic regression tests, including a fixture proving that the typed decoder rejects the provider shape.
+
 ## 10 November 2026 — maintained fork and container publication
 
 - Integrated our catch-up and category decoding work into master while retaining upstream history.

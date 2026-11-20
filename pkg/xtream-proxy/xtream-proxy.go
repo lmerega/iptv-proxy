@@ -122,7 +122,7 @@ func (c *Client) Action(config *config.ProxyConfig, action string, q url.Values)
 		if err != nil {
 			return
 		}
-		respBody, err = c.GetVideoOnDemandInfo(q["vod_id"][0])
+		respBody, err = c.vodInfoResponse(q["vod_id"][0])
 	case getSeriesCategories:
 		respBody, err = c.GetSeriesCategories()
 	case getSeries:
@@ -136,7 +136,7 @@ func (c *Client) Action(config *config.ProxyConfig, action string, q url.Values)
 		if err != nil {
 			return
 		}
-		respBody, err = c.GetSeriesInfo(q["series_id"][0])
+		respBody, err = c.seriesInfoResponse(q["series_id"][0])
 	case getShortEPG:
 		limit := 0
 
