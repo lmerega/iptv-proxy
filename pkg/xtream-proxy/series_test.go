@@ -1,11 +1,14 @@
 package xtreamproxy
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/WireshJ/iptv-proxy/pkg/config"
 	xtream "github.com/tellytv/go.xtream-codes"
@@ -85,6 +88,73 @@ func TestInfoActionsErrorsReturnBadGateway(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func sequenceClient(t *testing.T, statuses []int, body string, calls *int) *Client {
+	t.Helper()
+	c := epgTestClient(t, 200, body, nil)
+	c.HTTP = &http.Client{Transport: epgTransport(func(*http.Request) (*http.Response, error) {
+		status := statuses[len(statuses)-1]
+		if *calls < len(statuses) {
+			status = statuses[*calls]
+		}
+		*calls++
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+	return c
+}
+
+func TestInfoActionsRetryTransientProviderErrors(t *testing.T) {
+	saved := infoRetryDelays
+	infoRetryDelays = []time.Duration{0, 0}
+	defer func() { infoRetryDelays = saved }()
+	for _, tc := range []struct {
+		name      string
+		statuses  []int
+		wantCalls int
+		wantOK    bool
+	}{
+		{"502-then-ok", []int{502, 200}, 2, true},
+		{"504-503-ok", []int{504, 503, 200}, 3, true},
+		{"always-502", []int{502}, 3, false},
+		{"404-not-retried", []int{404, 200}, 1, false},
+		{"500-not-retried", []int{500, 200}, 1, false},
+	} {
+		for _, action := range []struct{ name, param, body string }{{getSerieInfo, "series_id", seriesInfoFixture}, {getVodInfo, "vod_id", vodInfoFixture}} {
+			t.Run(action.name+"/"+tc.name, func(t *testing.T) {
+				calls := 0
+				c := sequenceClient(t, tc.statuses, action.body, &calls)
+				_, status, err := c.Action(&config.ProxyConfig{}, action.name, url.Values{action.param: {"1045"}})
+				if calls != tc.wantCalls {
+					t.Fatalf("calls=%d want %d", calls, tc.wantCalls)
+				}
+				if tc.wantOK != (err == nil) || (!tc.wantOK && status != http.StatusBadGateway) {
+					t.Fatalf("status=%d error=%v", status, err)
+				}
+			})
+		}
+	}
+}
+
+func TestInfoRetryStopsWhenClientGoesAway(t *testing.T) {
+	saved := infoRetryDelays
+	infoRetryDelays = []time.Duration{time.Hour, time.Hour}
+	defer func() { infoRetryDelays = saved }()
+	calls := 0
+	c := sequenceClient(t, []int{502}, `{}`, &calls)
+	ctx, cancel := context.WithCancel(context.Background())
+	c.Context = ctx
+	go func() { time.Sleep(50 * time.Millisecond); cancel() }()
+	done := make(chan error, 1)
+	go func() { _, _, err := c.Action(&config.ProxyConfig{}, getVodInfo, url.Values{"vod_id": {"1"}}); done <- err }()
+	select {
+	case err := <-done:
+		if err == nil || calls != 1 {
+			t.Fatalf("calls=%d error=%v", calls, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("retry ignored the cancelled request")
 	}
 }
 
