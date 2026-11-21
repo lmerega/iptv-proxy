@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Providers return empty arrays where the typed Xtream decoder expects objects
@@ -38,7 +39,7 @@ func (c *Client) rawInfoResponse(action, idParam, id, label string) (json.RawMes
 		return nil, errors.New("could not build " + label + " request")
 	}
 	req.Header.Set("User-Agent", c.UserAgent)
-	resp, err := c.HTTP.Do(req)
+	resp, err := c.doWithTransientRetry(req)
 	if err != nil {
 		return nil, errors.New(label + " provider request failed")
 	}
@@ -59,4 +60,29 @@ func (c *Client) rawInfoResponse(action, idParam, id, label string) (json.RawMes
 		return nil, errors.New(label + " provider response is not a JSON object")
 	}
 	return json.RawMessage(body), nil
+}
+
+// infoRetryDelays are the pauses before the second and third attempt. Some
+// providers answer 502/503/504 intermittently on single titles and succeed a
+// moment later; other statuses and transport errors are not retried.
+var infoRetryDelays = []time.Duration{700 * time.Millisecond, 1500 * time.Millisecond}
+
+func transientStatus(code int) bool {
+	return code == http.StatusBadGateway || code == http.StatusServiceUnavailable || code == http.StatusGatewayTimeout
+}
+
+func (c *Client) doWithTransientRetry(req *http.Request) (*http.Response, error) {
+	for attempt := 0; ; attempt++ {
+		resp, err := c.HTTP.Do(req)
+		if err != nil || !transientStatus(resp.StatusCode) || attempt >= len(infoRetryDelays) {
+			return resp, err
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
+		resp.Body.Close()
+		select {
+		case <-req.Context().Done():
+			return nil, req.Context().Err()
+		case <-time.After(infoRetryDelays[attempt]):
+		}
+	}
 }

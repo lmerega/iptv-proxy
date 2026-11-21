@@ -2,6 +2,11 @@
 
 This is a modification record for the fork, not a replacement for the original authors' history or copyright notices. Direct upstream: [WireshJ/iptv-proxy](https://github.com/WireshJ/iptv-proxy). Earlier authors and contributions are listed in [README.md](README.md#-credits).
 
+## 21 November 2026 — retry of transient provider errors on info requests
+
+- `get_series_info` and `get_vod_info` now retry up to twice (after 0.7 s and 1.5 s) when the provider answers 502, 503 or 504, which some providers do intermittently on single titles. Other statuses and transport errors are not retried, and the retry stops as soon as the client request is cancelled.
+- Added regression tests for the retry sequence, the statuses that are not retried and the cancellation.
+
 ## 20 November 2026 — series and VOD info passthrough
 
 - Forwarded `get_series_info` and `get_vod_info` provider JSON unchanged instead of decoding it with the typed Xtream structs, which rejected documents with empty arrays where objects are expected (episode `info`, `audio`, `video`) or mixed numeric/quoted fields and made the proxy answer HTTP 502 with an empty body.
